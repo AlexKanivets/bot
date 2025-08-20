@@ -70,28 +70,39 @@ async def handle_start_command(message: Message, session: AsyncSession):
     Перехватывает команду /start для показа юридических документов при первом запуске
     """
     try:
+        logger.info(f"[LegalDocs] Перехвачена команда /start от пользователя {message.from_user.id}")
+        
         from .settings import FIRST_LAUNCH_LEGAL_DOCS_ENABLED, LEGAL_DOCS_ENABLED
         
         if not LEGAL_DOCS_ENABLED or not FIRST_LAUNCH_LEGAL_DOCS_ENABLED:
+            logger.info(f"[LegalDocs] Модуль отключен, пропускаем обработку")
             return  # Пропускаем обработку, позволяя основному обработчику работать
         
         # Проверяем, является ли это первым запуском пользователя
         try:
             from database import get_trial, get_key_count
             user_id = message.from_user.id
+            logger.info(f"[LegalDocs] Проверяем первого запуска для пользователя {user_id}")
+            
             trial_status = await get_trial(session, user_id)
             key_count = await get_key_count(session, user_id)
             
+            logger.info(f"[LegalDocs] Пользователь {user_id}: trial_status={trial_status}, key_count={key_count}")
+            
             # Если у пользователя нет ключей и не активен пробный период - это первый запуск
             if key_count == 0 and trial_status == 0:
+                logger.info(f"[LegalDocs] Первый запуск для пользователя {user_id}, показываем документы")
                 # Показываем юридические документы
                 await show_legal_docs_first_launch(message, session)
                 return  # Прерываем обработку, не позволяя основному обработчику работать
+            else:
+                logger.info(f"[LegalDocs] Не первый запуск для пользователя {user_id}, пропускаем")
                 
         except Exception as e:
             logger.error(f"[LegalDocs] Ошибка проверки первого запуска: {e}")
             
         # Если это не первый запуск, пропускаем обработку
+        logger.info(f"[LegalDocs] Пропускаем команду /start к основному обработчику")
         return
         
     except Exception as e:
@@ -102,17 +113,24 @@ async def handle_start_command(message: Message, session: AsyncSession):
 async def show_legal_docs_first_launch(message, session):
     """Показывает юридические документы при первом запуске"""
     try:
+        logger.info(f"[LegalDocs] Начинаем показ документов для пользователя {message.from_user.id}")
+        
         from .texts import FIRST_LAUNCH_LEGAL_MESSAGE
         from .settings import FIRST_LAUNCH_LEGAL_DOCS_ENABLED
         
         if not FIRST_LAUNCH_LEGAL_DOCS_ENABLED:
+            logger.warning(f"[LegalDocs] Функция первого запуска отключена")
             return
             
+        logger.info(f"[LegalDocs] Создаем клавиатуру с документами")
+        
         # Создаем клавиатуру с документами и кнопкой принятия
         kb = InlineKeyboardBuilder()
         
         # Добавляем кнопки документов
         from .texts import LEGAL_DOCS_BUTTON, ACCEPT_DOCUMENTS_BUTTON
+        logger.info(f"[LegalDocs] Добавляем {len(LEGAL_DOCS_BUTTON)} документов")
+        
         for doc in LEGAL_DOCS_BUTTON:
             if _validate_url(doc.get("url", "")):
                 kb.row(
@@ -121,6 +139,9 @@ async def show_legal_docs_first_launch(message, session):
                         web_app=WebAppInfo(url=doc["url"])
                     )
                 )
+                logger.info(f"[LegalDocs] Добавлена кнопка: {doc['text']}")
+            else:
+                logger.error(f"[LegalDocs] Невалидный URL для документа: {doc.get('url', '')}")
         
         # Кнопка принятия
         kb.row(
@@ -129,8 +150,10 @@ async def show_legal_docs_first_launch(message, session):
                 callback_data="accept_legal_docs"
                 )
             )
+        logger.info(f"[LegalDocs] Добавлена кнопка принятия: {ACCEPT_DOCUMENTS_BUTTON}")
         
         # Показываем сообщение с юридическими документами
+        logger.info(f"[LegalDocs] Отправляем сообщение с документами")
         from handlers.utils import edit_or_send_message
         await edit_or_send_message(
             target_message=message,
@@ -138,8 +161,12 @@ async def show_legal_docs_first_launch(message, session):
             reply_markup=kb.as_markup()
         )
         
+        logger.info(f"[LegalDocs] Документы успешно показаны пользователю {message.from_user.id}")
+        
     except Exception as e:
         logger.error(f"[LegalDocs] Ошибка показа документов при первом запуске: {e}")
+        import traceback
+        logger.error(f"[LegalDocs] Traceback: {traceback.format_exc()}")
 
 
 
