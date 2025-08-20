@@ -36,38 +36,18 @@ def _validate_url(url: str) -> bool:
 
 def _build_menu_button() -> InlineKeyboardButton:
     """Создает кнопку для доступа к меню юридических документов"""
-    from .settings import LEGAL_MENU_BUTTON_TEXT
+    from .texts import LEGAL_MENU_BUTTON_TEXT
     return InlineKeyboardButton(text=LEGAL_MENU_BUTTON_TEXT, callback_data="legal_docs_menu")
 
 
 def _build_direct_buttons() -> list[InlineKeyboardButton]:
     """Создает кнопки для прямого доступа к документам"""
-    from .settings import (
-        TERMS_BUTTON_TEXT, PRIVACY_BUTTON_TEXT, 
-        TERMS_URL, PRIVACY_URL, ADDITIONAL_DOCS
-    )
+    from .texts import LEGAL_DOCS_BUTTON
     
     buttons = []
     
-    # Основные документы
-    if _validate_url(TERMS_URL):
-        buttons.append(InlineKeyboardButton(
-            text=TERMS_BUTTON_TEXT, 
-            web_app=WebAppInfo(url=TERMS_URL)
-        ))
-    else:
-        logger.error(f"[LegalDocs] Невалидный URL для соглашения: {TERMS_URL}")
-    
-    if _validate_url(PRIVACY_URL):
-        buttons.append(InlineKeyboardButton(
-            text=PRIVACY_BUTTON_TEXT, 
-            web_app=WebAppInfo(url=PRIVACY_URL)
-        ))
-    else:
-        logger.error(f"[LegalDocs] Невалидный URL для политики: {PRIVACY_URL}")
-    
-    # Дополнительные документы
-    for doc in ADDITIONAL_DOCS:
+    # Все документы из единого массива
+    for doc in LEGAL_DOCS_BUTTON:
         if _validate_url(doc.get("url", "")):
             buttons.append(InlineKeyboardButton(
                 text=doc["text"],
@@ -118,12 +98,8 @@ async def about_vpn_hook(**kwargs):
 async def show_legal_docs_menu(callback: CallbackQuery):
     """Показывает меню юридических документов с кнопками для WebApp"""
     try:
-        from .settings import (
-            LEGAL_DOCS_ENABLED, LEGAL_DOCS_MENU_TEXT,
-            TERMS_BUTTON_TEXT, PRIVACY_BUTTON_TEXT, 
-            TERMS_URL, PRIVACY_URL, ADDITIONAL_DOCS
-        )
-        from .texts import ERROR_MODULE_DISABLED, ERROR_NO_DOCUMENTS
+        from .settings import LEGAL_DOCS_ENABLED
+        from .texts import LEGAL_DOCS_MENU_TEXT, LEGAL_DOCS_BUTTON, ERROR_MODULE_DISABLED, ERROR_NO_DOCUMENTS
         from buttons import BACK
         from utils import edit_or_send_message
         
@@ -140,29 +116,8 @@ async def show_legal_docs_menu(callback: CallbackQuery):
         
         kb = InlineKeyboardBuilder()
         
-        # Основные документы
-        if _validate_url(TERMS_URL):
-            kb.row(
-                InlineKeyboardButton(
-                    text=TERMS_BUTTON_TEXT, 
-                    web_app=WebAppInfo(url=TERMS_URL)
-                )
-            )
-        else:
-            logger.error(f"[LegalDocs] Невалидный URL для соглашения: {TERMS_URL}")
-        
-        if _validate_url(PRIVACY_URL):
-            kb.row(
-                InlineKeyboardButton(
-                    text=PRIVACY_BUTTON_TEXT, 
-                    web_app=WebAppInfo(url=PRIVACY_URL)
-                )
-            )
-        else:
-            logger.error(f"[LegalDocs] Невалидный URL для политики: {PRIVACY_URL}")
-        
-        # Дополнительные документы
-        for doc in ADDITIONAL_DOCS:
+        # Все документы из единого массива
+        for doc in LEGAL_DOCS_BUTTON:
             if _validate_url(doc.get("url", "")):
                 kb.row(
                     InlineKeyboardButton(
