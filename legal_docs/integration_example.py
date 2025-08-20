@@ -25,30 +25,34 @@ def configure_legal_docs():
     # Пример настройки для режима "menu" (по умолчанию)
     settings.DISPLAY_MODE = "menu"
     settings.LEGAL_DOCS_ENABLED = True
-    settings.TERMS_URL = "https://your-domain.com/terms.html"  # Полный валидный URL
-    settings.PRIVACY_URL = "https://your-domain.com/privacy.html"  # Полный валидный URL
+    
+    # Настройка всех документов в едином массиве
+    settings.ALL_DOCS = [
+        {
+            "text": "📋 Пользовательское соглашение",
+            "url": "https://your-domain.com/terms.html"
+        },
+        {
+            "text": "🔒 Политика конфиденциальности",
+            "url": "https://your-domain.com/privacy.html"
+        },
+        # Можно добавить дополнительные документы:
+        # {
+        #     "text": "📜 Правила использования",
+        #     "url": "https://your-domain.com/rules.html"
+        # },
+        # {
+        #     "text": "⚖️ Отказ от ответственности", 
+        #     "url": "https://your-domain.com/disclaimer.html"
+        # }
+    ]
     
     # Или настройка для режима "direct" (кнопки напрямую в разделе "О сервисе")
     # settings.DISPLAY_MODE = "direct"
     # settings.DIRECT_LAYOUT = "separate_rows"  # или "same_row"
-    # settings.BUTTONS_POSITION = "before_back"
     
-    # Добавление дополнительных документов
-    # settings.ADDITIONAL_DOCS = [
-    #     {
-    #         "text": "📜 Правила использования",
-    #         "url": "https://your-domain.com/rules.html"
-    #     },
-    #     {
-    #         "text": "⚖️ Отказ от ответственности", 
-    #         "url": "https://your-domain.com/disclaimer.html"
-    #     }
-    # ]
-    
-    # Настройка текстов кнопок
+    # Настройка текста кнопки меню
     # settings.LEGAL_MENU_BUTTON_TEXT = "📄 Документы"
-    # settings.TERMS_BUTTON_TEXT = "📋 Соглашение"
-    # settings.PRIVACY_BUTTON_TEXT = "🔒 Конфиденциальность"
     
     print("⚙️ Модуль legal_docs настроен")
 
