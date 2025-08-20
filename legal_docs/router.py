@@ -1,6 +1,8 @@
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardButton, WebAppInfo
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, InlineKeyboardButton, WebAppInfo, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from sqlalchemy.ext.asyncio import AsyncSession
 import re
 
 # Импорты для логирования (если hooks недоступны)
@@ -59,46 +61,42 @@ def _build_direct_buttons() -> list[InlineKeyboardButton]:
     return buttons
 
 
-async def start_menu_hook(**kwargs):
+
+
+
+@router.message(Command("start"))
+async def handle_start_command(message: Message, session: AsyncSession):
     """
-    Хук для показа юридических документов при первом запуске
+    Перехватывает команду /start для показа юридических документов при первом запуске
     """
     try:
         from .settings import FIRST_LAUNCH_LEGAL_DOCS_ENABLED, LEGAL_DOCS_ENABLED
         
         if not LEGAL_DOCS_ENABLED or not FIRST_LAUNCH_LEGAL_DOCS_ENABLED:
-            return None
-            
-        # Получаем данные из хука
-        chat_id = kwargs.get("chat_id")
-        session = kwargs.get("session")
+            return  # Пропускаем обработку, позволяя основному обработчику работать
         
-        if not chat_id or not session:
-            return None
-            
         # Проверяем, является ли это первым запуском пользователя
         try:
             from database import get_trial, get_key_count
-            trial_status = await get_trial(session, chat_id)
-            key_count = await get_key_count(session, chat_id)
+            user_id = message.from_user.id
+            trial_status = await get_trial(session, user_id)
+            key_count = await get_key_count(session, user_id)
             
             # Если у пользователя нет ключей и не активен пробный период - это первый запуск
             if key_count == 0 and trial_status == 0:
-                # Возвращаем специальный объект для замены стандартного меню
-                return {
-                    "replace_menu": True,
-                    "text": "Для начала использования сервиса, вам необходимо прочитать и принять документы",
-                    "buttons": _build_first_launch_buttons()
-                }
+                # Показываем юридические документы
+                await show_legal_docs_first_launch(message, session)
+                return  # Прерываем обработку, не позволяя основному обработчику работать
                 
         except Exception as e:
             logger.error(f"[LegalDocs] Ошибка проверки первого запуска: {e}")
             
-        return None
+        # Если это не первый запуск, пропускаем обработку
+        return
         
     except Exception as e:
-        logger.error(f"[LegalDocs] Ошибка в хуке start_menu: {e}")
-        return None
+        logger.error(f"[LegalDocs] Ошибка обработки команды start: {e}")
+        return
 
 
 async def show_legal_docs_first_launch(message, session):
@@ -129,8 +127,8 @@ async def show_legal_docs_first_launch(message, session):
             InlineKeyboardButton(
                 text=ACCEPT_DOCUMENTS_BUTTON,
                 callback_data="accept_legal_docs"
+                )
             )
-        )
         
         # Показываем сообщение с юридическими документами
         from handlers.utils import edit_or_send_message
@@ -144,27 +142,7 @@ async def show_legal_docs_first_launch(message, session):
         logger.error(f"[LegalDocs] Ошибка показа документов при первом запуске: {e}")
 
 
-def _build_first_launch_buttons() -> list[InlineKeyboardButton]:
-    """Создает кнопки для первого запуска"""
-    from .texts import LEGAL_DOCS_BUTTON, ACCEPT_DOCUMENTS_BUTTON
-    
-    buttons = []
-    
-    # Кнопки документов
-    for doc in LEGAL_DOCS_BUTTON:
-        if _validate_url(doc.get("url", "")):
-            buttons.append(InlineKeyboardButton(
-                text=doc["text"],
-                web_app=WebAppInfo(url=doc["url"])
-            ))
-    
-    # Кнопка принятия
-    buttons.append(InlineKeyboardButton(
-        text=ACCEPT_DOCUMENTS_BUTTON,
-        callback_data="accept_legal_docs"
-    ))
-    
-    return buttons
+
 
 
 async def about_vpn_hook(**kwargs):
@@ -277,21 +255,8 @@ async def accept_legal_documents(callback: CallbackQuery):
             reply_markup=None
         )
         
-        # Перезапускаем команду start для показа стандартного меню
-        from aiogram.fsm.context import FSMContext
-        from start import start_entry
-        
-        # Создаем фиктивное сообщение для команды start
-        class FakeMessage:
-            def __init__(self, chat_id, from_user):
-                self.chat = type('Chat', (), {'id': chat_id})()
-                self.from_user = from_user
-                self.text = "/start"
-        
-        fake_message = FakeMessage(callback.message.chat.id, callback.from_user)
-        
-        # Вызываем стандартную логику start
-        await start_entry(fake_message, callback.bot.get_current(), None, False, False)
+        # Отправляем новую команду /start для показа стандартного меню
+        await callback.message.answer("/start")
         
     except Exception as e:
         logger.error(f"[LegalDocs] Ошибка принятия документов: {e}")
@@ -300,7 +265,6 @@ async def accept_legal_documents(callback: CallbackQuery):
 
 # Регистрируем хуки (если система хуков доступна)
 if HOOKS_AVAILABLE:
-    register_hook("start_menu", start_menu_hook)
     register_hook("about_vpn", about_vpn_hook)
     logger.info("[LegalDocs] Модуль инициализирован, хуки зарегистрированы")
 else:

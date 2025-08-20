@@ -247,25 +247,6 @@ async def show_start_menu(message: Message, admin: bool, session: AsyncSession):
 
     try:
         module_buttons = await run_hooks("start_menu", chat_id=message.chat.id, session=session)
-        
-        # Проверяем, есть ли специальный объект для замены меню
-        if module_buttons and isinstance(module_buttons, list):
-            for module_data in module_buttons:
-                if isinstance(module_data, dict) and module_data.get("replace_menu"):
-                    # Заменяем стандартное меню на юридические документы
-                    kb = InlineKeyboardBuilder()
-                    
-                    # Добавляем кнопки документов
-                    buttons = module_data.get("buttons", [])
-                    for button in buttons:
-                        kb.row(button)
-                    
-                    # Показываем сообщение с юридическими документами
-                    text = module_data.get("text", "Для начала использования сервиса, вам необходимо прочитать и принять документы")
-                    await edit_or_send_message(message, text, reply_markup=kb.as_markup(), media_path=image_path)
-                    return
-        
-        # Стандартное меню - добавляем кнопки модулей
         kb = insert_hook_buttons(kb, module_buttons)
     except Exception as e:
         logger.error(f"[Hooks:start_menu] Ошибка вставки кнопок: {e}")
