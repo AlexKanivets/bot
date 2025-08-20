@@ -59,47 +59,91 @@ def _build_direct_buttons() -> list[InlineKeyboardButton]:
     return buttons
 
 
-async def start_menu_hook(**kwargs):
+async def start_link_hook(**kwargs):
     """
-    Хук для добавления юридических документов при первом запуске
+    Хук для показа юридических документов при первом запуске
     """
     try:
         from .settings import FIRST_LAUNCH_LEGAL_DOCS_ENABLED, LEGAL_DOCS_ENABLED
-        from .texts import FIRST_LAUNCH_LEGAL_MESSAGE, ACCEPT_DOCUMENTS_BUTTON
         
         if not LEGAL_DOCS_ENABLED or not FIRST_LAUNCH_LEGAL_DOCS_ENABLED:
             return None
             
         # Получаем данные из хука
-        chat_id = kwargs.get("chat_id")
+        message = kwargs.get("message")
         session = kwargs.get("session")
+        user_data = kwargs.get("user_data")
         
-        if not chat_id or not session:
+        if not message or not session or not user_data:
             return None
             
         # Проверяем, является ли это первым запуском пользователя
-        # Для этого проверяем, есть ли у пользователя ключи или пробный период
         try:
             from database import get_trial, get_key_count
-            trial_status = await get_trial(session, chat_id)
-            key_count = await get_key_count(session, chat_id)
+            user_id = user_data.get("tg_id")
+            if not user_id:
+                return None
+                
+            trial_status = await get_trial(session, user_id)
+            key_count = await get_key_count(session, user_id)
             
             # Если у пользователя нет ключей и не активен пробный период - это первый запуск
             if key_count == 0 and trial_status == 0:
-                # Возвращаем специальный объект для замены стандартного меню
-                return {
-                    "replace_menu": True,
-                    "text": FIRST_LAUNCH_LEGAL_MESSAGE,
-                    "buttons": _build_first_launch_buttons()
-                }
+                # Показываем юридические документы
+                await show_legal_docs_first_launch(message, session)
+                return {"handled": True}  # Указываем, что хук обработал запрос
+                
         except Exception as e:
             logger.error(f"[LegalDocs] Ошибка проверки первого запуска: {e}")
             
         return None
         
     except Exception as e:
-        logger.error(f"[LegalDocs] Ошибка в хуке start_menu: {e}")
+        logger.error(f"[LegalDocs] Ошибка в хуке start_link: {e}")
         return None
+
+
+async def show_legal_docs_first_launch(message, session):
+    """Показывает юридические документы при первом запуске"""
+    try:
+        from .texts import FIRST_LAUNCH_LEGAL_MESSAGE
+        from .settings import FIRST_LAUNCH_LEGAL_DOCS_ENABLED
+        
+        if not FIRST_LAUNCH_LEGAL_DOCS_ENABLED:
+            return
+            
+        # Создаем клавиатуру с документами и кнопкой принятия
+        kb = InlineKeyboardBuilder()
+        
+        # Добавляем кнопки документов
+        from .texts import LEGAL_DOCS_BUTTON, ACCEPT_DOCUMENTS_BUTTON
+        for doc in LEGAL_DOCS_BUTTON:
+            if _validate_url(doc.get("url", "")):
+                kb.row(
+                    InlineKeyboardButton(
+                        text=doc["text"],
+                        web_app=WebAppInfo(url=doc["url"])
+                    )
+                )
+        
+        # Кнопка принятия
+        kb.row(
+            InlineKeyboardButton(
+                text=ACCEPT_DOCUMENTS_BUTTON,
+                callback_data="accept_legal_docs"
+            )
+        )
+        
+        # Показываем сообщение с юридическими документами
+        from handlers.utils import edit_or_send_message
+        await edit_or_send_message(
+            target_message=message,
+            text=FIRST_LAUNCH_LEGAL_MESSAGE,
+            reply_markup=kb.as_markup()
+        )
+        
+    except Exception as e:
+        logger.error(f"[LegalDocs] Ошибка показа документов при первом запуске: {e}")
 
 
 def _build_first_launch_buttons() -> list[InlineKeyboardButton]:
@@ -258,7 +302,7 @@ async def accept_legal_documents(callback: CallbackQuery):
 
 # Регистрируем хуки (если система хуков доступна)
 if HOOKS_AVAILABLE:
-    register_hook("start_menu", start_menu_hook)
+    register_hook("start_link", start_link_hook)
     register_hook("about_vpn", about_vpn_hook)
     logger.info("[LegalDocs] Модуль инициализирован, хуки зарегистрированы")
 else:
