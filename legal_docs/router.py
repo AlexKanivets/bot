@@ -100,8 +100,8 @@ async def show_legal_docs_menu(callback: CallbackQuery):
     try:
         from .settings import LEGAL_DOCS_ENABLED
         from .texts import LEGAL_DOCS_MENU_TEXT, LEGAL_DOCS_BUTTON, ERROR_MODULE_DISABLED, ERROR_NO_DOCUMENTS
-        from buttons import BACK
-        from utils import edit_or_send_message
+        from handlers.buttons import BACK
+        from handlers.utils import edit_or_send_message
         
         # Проверяем, включен ли модуль
         if not LEGAL_DOCS_ENABLED:
@@ -140,7 +140,7 @@ async def show_legal_docs_menu(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"[LegalDocs] Ошибка отображения меню: {e}")
         from .texts import ERROR_NO_DOCUMENTS
-        from buttons import BACK
+        from handlers.buttons import BACK
         
         kb = InlineKeyboardBuilder()
         kb.row(InlineKeyboardButton(text=BACK, callback_data="about_vpn"))
