@@ -59,7 +59,7 @@ def _build_direct_buttons() -> list[InlineKeyboardButton]:
     return buttons
 
 
-async def start_link_hook(**kwargs):
+async def start_menu_hook(**kwargs):
     """
     Хук для показа юридических документов при первом запуске
     """
@@ -70,28 +70,26 @@ async def start_link_hook(**kwargs):
             return None
             
         # Получаем данные из хука
-        message = kwargs.get("message")
+        chat_id = kwargs.get("chat_id")
         session = kwargs.get("session")
-        user_data = kwargs.get("user_data")
         
-        if not message or not session or not user_data:
+        if not chat_id or not session:
             return None
             
         # Проверяем, является ли это первым запуском пользователя
         try:
             from database import get_trial, get_key_count
-            user_id = user_data.get("tg_id")
-            if not user_id:
-                return None
-                
-            trial_status = await get_trial(session, user_id)
-            key_count = await get_key_count(session, user_id)
+            trial_status = await get_trial(session, chat_id)
+            key_count = await get_key_count(session, chat_id)
             
             # Если у пользователя нет ключей и не активен пробный период - это первый запуск
             if key_count == 0 and trial_status == 0:
-                # Показываем юридические документы
-                await show_legal_docs_first_launch(message, session)
-                return {"handled": True}  # Указываем, что хук обработал запрос
+                # Возвращаем специальный объект для замены стандартного меню
+                return {
+                    "replace_menu": True,
+                    "text": "Для начала использования сервиса, вам необходимо прочитать и принять документы",
+                    "buttons": _build_first_launch_buttons()
+                }
                 
         except Exception as e:
             logger.error(f"[LegalDocs] Ошибка проверки первого запуска: {e}")
@@ -99,7 +97,7 @@ async def start_link_hook(**kwargs):
         return None
         
     except Exception as e:
-        logger.error(f"[LegalDocs] Ошибка в хуке start_link: {e}")
+        logger.error(f"[LegalDocs] Ошибка в хуке start_menu: {e}")
         return None
 
 
@@ -302,7 +300,7 @@ async def accept_legal_documents(callback: CallbackQuery):
 
 # Регистрируем хуки (если система хуков доступна)
 if HOOKS_AVAILABLE:
-    register_hook("start_link", start_link_hook)
+    register_hook("start_menu", start_menu_hook)
     register_hook("about_vpn", about_vpn_hook)
     logger.info("[LegalDocs] Модуль инициализирован, хуки зарегистрированы")
 else:

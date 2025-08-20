@@ -116,20 +116,8 @@ async def process_start_logic(
         text = text.split(maxsplit=1)[1]
 
     gift_detected = False
-    legal_docs_shown = False
     for part in text.split("-"):
-        # Запускаем хук start_link и проверяем результат
-        hook_result = await run_hooks("start_link", message=message, state=state, session=session, user_data=user_data, part=part)
-        
-        # Проверяем, показал ли хук юридические документы
-        if hook_result and isinstance(hook_result, list):
-            for result in hook_result:
-                if isinstance(result, dict) and result.get("handled"):
-                    legal_docs_shown = True
-                    break
-        
-        if legal_docs_shown:
-            break  # Если показали документы, прерываем обработку
+        await run_hooks("start_link", message=message, state=state, session=session, user_data=user_data, part=part)
 
         if "coupons" in part:
             await handle_coupon_link(part, message, state, session, admin, user_data)
@@ -144,7 +132,7 @@ async def process_start_logic(
             await handle_utm_link(part, message, state, session, user_data)
 
     await state.clear()
-    if gift_detected or legal_docs_shown:
+    if gift_detected:
         return
 
     if not await check_user_exists(session, user_data["tg_id"]):
@@ -259,6 +247,25 @@ async def show_start_menu(message: Message, admin: bool, session: AsyncSession):
 
     try:
         module_buttons = await run_hooks("start_menu", chat_id=message.chat.id, session=session)
+        
+        # Проверяем, есть ли специальный объект для замены меню
+        if module_buttons and isinstance(module_buttons, list):
+            for module_data in module_buttons:
+                if isinstance(module_data, dict) and module_data.get("replace_menu"):
+                    # Заменяем стандартное меню на юридические документы
+                    kb = InlineKeyboardBuilder()
+                    
+                    # Добавляем кнопки документов
+                    buttons = module_data.get("buttons", [])
+                    for button in buttons:
+                        kb.row(button)
+                    
+                    # Показываем сообщение с юридическими документами
+                    text = module_data.get("text", "Для начала использования сервиса, вам необходимо прочитать и принять документы")
+                    await edit_or_send_message(message, text, reply_markup=kb.as_markup(), media_path=image_path)
+                    return
+        
+        # Стандартное меню - добавляем кнопки модулей
         kb = insert_hook_buttons(kb, module_buttons)
     except Exception as e:
         logger.error(f"[Hooks:start_menu] Ошибка вставки кнопок: {e}")
