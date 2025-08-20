@@ -263,12 +263,23 @@ async def handle_about_vpn(callback: CallbackQuery, session: AsyncSession):
     back_target = "profile" if SHOW_START_MENU_ONCE and trial > 0 else "start"
 
     kb = InlineKeyboardBuilder()
+
+    try:
+        module_buttons = await run_hooks("about_vpn", chat_id=callback.from_user.id, session=session)
+        kb = insert_hook_buttons(kb, module_buttons)
+    except Exception as e:
+        logger.error(f"[Hooks:about_vpn] Ошибка вставки кнопок: {e}")
+
+    if CHANNEL_EXISTS:
+        about_buttons = []
+        about_buttons.append(InlineKeyboardButton(text=SUPPORT, url=SUPPORT_CHAT_URL))
+        about_buttons.append(InlineKeyboardButton(text=CHANNEL, url=CHANNEL_URL))
+        kb.row(*about_buttons)
+    else:
+        kb.row(InlineKeyboardButton(text=SUPPORT, url=SUPPORT_CHAT_URL))
+
     if DONATIONS_ENABLE:
         kb.row(InlineKeyboardButton(text="💰 Поддержать проект", callback_data="donate"))
-
-    kb.row(InlineKeyboardButton(text=SUPPORT, url=SUPPORT_CHAT_URL))
-    if CHANNEL_EXISTS:
-        kb.row(InlineKeyboardButton(text=CHANNEL, url=CHANNEL_URL))
 
     kb.row(InlineKeyboardButton(text=BACK, callback_data=back_target))
     text = get_about_vpn("3.2.3-minor")
