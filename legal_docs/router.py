@@ -59,6 +59,72 @@ def _build_direct_buttons() -> list[InlineKeyboardButton]:
     return buttons
 
 
+async def start_menu_hook(**kwargs):
+    """
+    Хук для добавления юридических документов при первом запуске
+    """
+    try:
+        from .settings import FIRST_LAUNCH_LEGAL_DOCS_ENABLED, LEGAL_DOCS_ENABLED
+        from .texts import FIRST_LAUNCH_LEGAL_MESSAGE, ACCEPT_DOCUMENTS_BUTTON
+        
+        if not LEGAL_DOCS_ENABLED or not FIRST_LAUNCH_LEGAL_DOCS_ENABLED:
+            return None
+            
+        # Получаем данные из хука
+        chat_id = kwargs.get("chat_id")
+        session = kwargs.get("session")
+        
+        if not chat_id or not session:
+            return None
+            
+        # Проверяем, является ли это первым запуском пользователя
+        # Для этого проверяем, есть ли у пользователя ключи или пробный период
+        try:
+            from database import get_trial, get_key_count
+            trial_status = await get_trial(session, chat_id)
+            key_count = await get_key_count(session, chat_id)
+            
+            # Если у пользователя нет ключей и не активен пробный период - это первый запуск
+            if key_count == 0 and trial_status == 0:
+                # Возвращаем специальный объект для замены стандартного меню
+                return {
+                    "replace_menu": True,
+                    "text": FIRST_LAUNCH_LEGAL_MESSAGE,
+                    "buttons": _build_first_launch_buttons()
+                }
+        except Exception as e:
+            logger.error(f"[LegalDocs] Ошибка проверки первого запуска: {e}")
+            
+        return None
+        
+    except Exception as e:
+        logger.error(f"[LegalDocs] Ошибка в хуке start_menu: {e}")
+        return None
+
+
+def _build_first_launch_buttons() -> list[InlineKeyboardButton]:
+    """Создает кнопки для первого запуска"""
+    from .texts import LEGAL_DOCS_BUTTON, ACCEPT_DOCUMENTS_BUTTON
+    
+    buttons = []
+    
+    # Кнопки документов
+    for doc in LEGAL_DOCS_BUTTON:
+        if _validate_url(doc.get("url", "")):
+            buttons.append(InlineKeyboardButton(
+                text=doc["text"],
+                web_app=WebAppInfo(url=doc["url"])
+            ))
+    
+    # Кнопка принятия
+    buttons.append(InlineKeyboardButton(
+        text=ACCEPT_DOCUMENTS_BUTTON,
+        callback_data="accept_legal_docs"
+    ))
+    
+    return buttons
+
+
 async def about_vpn_hook(**kwargs):
     """
     Хук для добавления кнопок юридических документов в раздел 'О сервисе'
@@ -152,8 +218,47 @@ async def show_legal_docs_menu(callback: CallbackQuery):
         )
 
 
-# Регистрируем хук для раздела "О сервисе" (если система хуков доступна)
+@router.callback_query(F.data == "accept_legal_docs")
+async def accept_legal_documents(callback: CallbackQuery):
+    """Обрабатывает принятие юридических документов"""
+    try:
+        from .texts import DOCUMENTS_ACCEPTED_MESSAGE
+        from handlers.utils import edit_or_send_message
+        
+        # Отправляем сообщение об успешном принятии
+        await callback.answer("✅ Документы приняты!", show_alert=False)
+        
+        # Показываем стандартное меню
+        await edit_or_send_message(
+            target_message=callback.message,
+            text=DOCUMENTS_ACCEPTED_MESSAGE,
+            reply_markup=None
+        )
+        
+        # Перезапускаем команду start для показа стандартного меню
+        from aiogram.fsm.context import FSMContext
+        from start import start_entry
+        
+        # Создаем фиктивное сообщение для команды start
+        class FakeMessage:
+            def __init__(self, chat_id, from_user):
+                self.chat = type('Chat', (), {'id': chat_id})()
+                self.from_user = from_user
+                self.text = "/start"
+        
+        fake_message = FakeMessage(callback.message.chat.id, callback.from_user)
+        
+        # Вызываем стандартную логику start
+        await start_entry(fake_message, callback.bot.get_current(), None, False, False)
+        
+    except Exception as e:
+        logger.error(f"[LegalDocs] Ошибка принятия документов: {e}")
+        await callback.answer("❌ Произошла ошибка. Попробуйте еще раз.", show_alert=True)
+
+
+# Регистрируем хуки (если система хуков доступна)
 if HOOKS_AVAILABLE:
+    register_hook("start_menu", start_menu_hook)
     register_hook("about_vpn", about_vpn_hook)
     logger.info("[LegalDocs] Модуль инициализирован, хуки зарегистрированы")
 else:

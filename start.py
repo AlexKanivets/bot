@@ -223,6 +223,31 @@ async def handle_utm_link(utm_code: str, message: Message, state: FSMContext, se
 
 async def show_start_menu(message: Message, admin: bool, session: AsyncSession):
     image_path = os.path.join("img", "pic.jpg")
+    
+    # Проверяем, нужно ли показать юридические документы при первом запуске
+    try:
+        module_buttons = await run_hooks("start_menu", chat_id=message.chat.id, session=session)
+        
+        # Проверяем, есть ли специальный объект для замены меню
+        if module_buttons and isinstance(module_buttons, list) and len(module_buttons) > 0:
+            for module_data in module_buttons:
+                if isinstance(module_data, dict) and module_data.get("replace_menu"):
+                    # Заменяем стандартное меню на юридические документы
+                    kb = InlineKeyboardBuilder()
+                    
+                    # Добавляем кнопки документов
+                    buttons = module_data.get("buttons", [])
+                    for button in buttons:
+                        kb.row(button)
+                    
+                    # Показываем сообщение с юридическими документами
+                    text = module_data.get("text", "Для начала использования сервиса, вам необходимо прочитать и принять документы")
+                    await edit_or_send_message(message, text, reply_markup=kb.as_markup(), media_path=image_path)
+                    return
+    except Exception as e:
+        logger.error(f"[Hooks:start_menu] Ошибка проверки замены меню: {e}")
+    
+    # Стандартное меню
     kb = InlineKeyboardBuilder()
 
     trial_status = await get_trial(session, message.chat.id) if session else None
@@ -246,8 +271,15 @@ async def show_start_menu(message: Message, admin: bool, session: AsyncSession):
         kb.row(InlineKeyboardButton(text="📊 Администратор", callback_data=AdminPanelCallback(action="admin").pack()))
 
     try:
-        module_buttons = await run_hooks("start_menu", chat_id=message.chat.id, session=session)
-        kb = insert_hook_buttons(kb, module_buttons)
+        # Добавляем кнопки модулей для стандартного меню (исключая те, что уже обработаны)
+        if module_buttons and isinstance(module_buttons, list):
+            for module_data in module_buttons:
+                if not isinstance(module_data, dict) or not module_data.get("replace_menu"):
+                    # Добавляем обычные кнопки модулей
+                    if "button" in module_data:
+                        kb.row(module_data["button"])
+                    elif "buttons" in module_data:
+                        kb.row(*module_data["buttons"])
     except Exception as e:
         logger.error(f"[Hooks:start_menu] Ошибка вставки кнопок: {e}")
 
